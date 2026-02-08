@@ -14,6 +14,8 @@ file(GLOB HEADERS "include/*.h")  # Add this
 
 include_directories(include)
 
+find_program(CLANG_FORMAT_EXE clang-format)
+
 add_executable(t2-installer ${SOURCES} ${HEADERS}) 
 
 target_link_libraries(t2-installer Qt6::Widgets)

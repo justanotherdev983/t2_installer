@@ -1,10 +1,17 @@
-#include "installer_window.h"
 #include <QFile>
 #include <QLabel>
 #include <QMessageBox>
 #include <QRegularExpression>
 #include <QTextStream>
 #include <QVBoxLayout>
+
+#include <iostream>
+#include <fstream>
+#include <filesystem>
+
+#include "installer_window.h"
+
+#define DEFAULT_DRIVES_PATH "/sys/block"
 
 InstallerWindow::InstallerWindow(QWidget *parent)
     : QMainWindow(parent), buildProcess(nullptr) {
@@ -30,7 +37,6 @@ void InstallerWindow::setupUI() {
     progressBar->setVisible(true); // intially hidden
     layout->addWidget(progressBar);
 
-    // Install button
     installButton = new QPushButton("Install");
     layout->addWidget(installButton);
 
@@ -43,28 +49,28 @@ void InstallerWindow::setupUI() {
 }
 
 void InstallerWindow::loadDrives() {
-    // Read block devices from /proc/partitions or use lsblk
-    // TODO: Fix this hack with actual cpp
-    QProcess lsblk;
-    lsblk.start("lsblk", QStringList()
-                             << "-d" << "-n" << "-o" << "NAME,SIZE,TYPE");
-    lsblk.waitForFinished();
+    std::string path = DEFAULT_DRIVES_PATH;
 
-    QString output = lsblk.readAllStandardOutput();
-    QStringList lines = output.split("\n");
+    for (const auto& device : std::filesystem::directory_iterator(path)) {
+	std::string san_device = device.path().filename().string();
+	std::cout << san_device << std::endl;
+	//driveList->addItem(san_device);
+	
+	std::filesystem::path size_device_path = device.path() / "size";
+        std::ifstream size_device(size_device_path);
+        uint64_t sectors = 0;
 
-    for (const QString &line : lines) {
-        if (line.trimmed().isEmpty())
-            continue;
-        if (line.contains("disk")) {
-            QStringList parts =
-                line.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
-            if (parts.size() >= 2) {
-                QString device = "/dev/" + parts[0];
-                QString size = parts[1];
-                driveList->addItem(QString("%1 (%2)").arg(device, size));
-            }
-        }
+        if (size_device >> sectors) {
+            // Calculate GB: (sectors * 512 bytes) / 1024^3
+            double size_device_gb = (sectors * 512.0) / (1024.0 * 1024.0 * 1024.0); // TODO: support mg, gb and tb
+	    std::cout << size_device_gb << std::endl;
+
+	    QString display_device = QString("%1 (%2 GB)")
+		    .arg(QString::fromStdString(san_device))
+		    .arg(size_device_gb);
+	    driveList->addItem(display_device);
+
+	}
     }
 }
 

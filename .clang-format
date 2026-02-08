@@ -1,0 +1,10 @@
+Language: Cpp
+BasedOnStyle: LLVM
+IndentWidth: 8
+UseTab: Never
+BreakBeforeBraces: Attach  # or Linux if you prefer
+ColumnLimit: 80
+PointerAlignment: Right
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
