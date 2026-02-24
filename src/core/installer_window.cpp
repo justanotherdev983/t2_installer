@@ -28,6 +28,10 @@ class DriveItemWidget : public QWidget {
                 }
         }
 
+	QSize sizeHint() const override {
+    		return QSize(200, 180);
+	}
+
       protected:
         void paintEvent(QPaintEvent *) override {
                 QPainter painter(this);
@@ -216,7 +220,7 @@ void InstallerWindow::loadDrives() {
                             QString("%1 (%2 GB)")
                                 .arg(QString::fromStdString(san_device))
                                 .arg(size_device_gb);
-                        driveList->addItem(display_device);
+                        //driveList->addItem(display_device);
                         auto *item = new QListWidgetItem(driveList);
                         auto *widget =
                             new DriveItemWidget(device_name, size_str);
@@ -240,7 +244,8 @@ void InstallerWindow::onInstallClicked() {
 
         QString selectedDrive = driveList->currentItem()->text();
         // Extract just the device name (/dev/sda)
-        QString drive = selectedDrive.split(" ").first();
+        //QString drive = selectedDrive.split(" ").first();
+	QString drive = "/dev/" + driveList->currentItem()->data(Qt::UserRole).toString();
 
         auto reply = QMessageBox::question(
             this, "Confirm Installation",
@@ -248,6 +253,8 @@ void InstallerWindow::onInstallClicked() {
                     "⚠️ This will ERASE ALL DATA on this drive!")
                 .arg(drive),
             QMessageBox::Yes | QMessageBox::No);
+	
+	std::cout << "Going to starting installation on drive: " << drive.toStdString() << std::endl;
 
         if (reply == QMessageBox::Yes) {
                 startInstallation(drive);
@@ -255,6 +262,7 @@ void InstallerWindow::onInstallClicked() {
 }
 
 void InstallerWindow::startInstallation(const QString &drive) {
+	std::cout << "Starting installation on drive: " << drive.toStdString() << std::endl;
         installButton->setEnabled(false);
         driveList->setEnabled(false);
         progressBar->setVisible(true);
@@ -265,17 +273,27 @@ void InstallerWindow::startInstallation(const QString &drive) {
 
         connect(buildProcess, &QProcess::readyReadStandardOutput, this,
                 &InstallerWindow::onProcessOutput);
+	connect(buildProcess, &QProcess::readyReadStandardError, this,
+        	&InstallerWindow::onProcessOutput);
         connect(buildProcess, &QProcess::finished, this,
                 &InstallerWindow::onProcessFinished);
-        // TODO: find actual script that installs this
-        buildProcess->start("scripts/stone_wrapper.sh",
-                            QStringList() << "desktop");
+	std::cout << "startings stone wrapper....\n";
+        buildProcess->start("../scripts/stone_wrapper.sh",
+                            QStringList() << drive);
+
+	connect(buildProcess, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
+    		qDebug() << "Process error:" << error << buildProcess->errorString();
+	});
 }
 
 void InstallerWindow::onProcessOutput() {
-        QString output = buildProcess->readAllStandardOutput();
         // TODO: Create nice GUI progress bar in a widget....
-        qDebug() << output;
+    buildProcess->setReadChannel(QProcess::StandardOutput);
+    while (buildProcess->canReadLine())
+        qDebug() << "[stdout]" << buildProcess->readLine().trimmed();
+    buildProcess->setReadChannel(QProcess::StandardError);
+    while (buildProcess->canReadLine())
+        qDebug() << "[stderr]" << buildProcess->readLine().trimmed();
 }
 
 void InstallerWindow::onProcessFinished(int exitCode,

@@ -1,0 +1,46 @@
+--- libtar-1.2.11/compat/snprintf.c.orig	2003-06-09 14:41:24.000000000 +0200
++++ libtar-1.2.11/compat/snprintf.c	2003-06-09 14:41:29.000000000 +0200
+@@ -51,6 +51,7 @@
+ /* Define this as a fall through, HAVE_STDARG_H is probably already set */
+ 
+ #define HAVE_VARARGS_H
++#define HAVE_STDARG_H
+ 
+ /* varargs declarations: */
+ 
+@@ -246,7 +247,7 @@
+       case 'd':
+       case 'i':
+ 	if (cflags == DP_C_SHORT) 
+-	  value = va_arg (args, short int);
++	  value = (short int) va_arg (args, int);
+ 	else if (cflags == DP_C_LONG)
+ 	  value = va_arg (args, long int);
+ 	else
+@@ -256,7 +257,7 @@
+       case 'o':
+ 	flags |= DP_F_UNSIGNED;
+ 	if (cflags == DP_C_SHORT)
+-	  value = va_arg (args, unsigned short int);
++	  value = (unsigned short int) va_arg (args, unsigned int);
+ 	else if (cflags == DP_C_LONG)
+ 	  value = va_arg (args, unsigned long int);
+ 	else
+@@ -266,7 +267,7 @@
+       case 'u':
+ 	flags |= DP_F_UNSIGNED;
+ 	if (cflags == DP_C_SHORT)
+-	  value = va_arg (args, unsigned short int);
++	  value = (unsigned short int) va_arg (args, unsigned int);
+ 	else if (cflags == DP_C_LONG)
+ 	  value = va_arg (args, unsigned long int);
+ 	else
+@@ -278,7 +279,7 @@
+       case 'x':
+ 	flags |= DP_F_UNSIGNED;
+ 	if (cflags == DP_C_SHORT)
+-	  value = va_arg (args, unsigned short int);
++	  value = (unsigned short int) va_arg (args, unsigned int);
+ 	else if (cflags == DP_C_LONG)
+ 	  value = va_arg (args, unsigned long int);
+ 	else

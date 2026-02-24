@@ -1,11 +1,11 @@
-#!/bin/sh
-
-#!/bin/sh
+#!/bin/bash
 # T2 SDE Installer - Stone Wrapper
 # Called by the Qt installer with the target device as argument
 # Usage: stone_wrapper.sh /dev/<drive_name>
 
-set -e
+set -xe
+
+export platform2="pc"
 
 STONE_DIR="$(dirname "$0")/../deps/stone"
 SETUPD="$STONE_DIR"
@@ -28,20 +28,18 @@ fi
 echo "INFO: Target device: $TARGET_DEV"
 
 # --- Stub out all GUI functions so stone runs non-interactively ---
-# These replace the interactive dialog/text prompts with automatic answers
+# Tchese replace the interactive dialog/text prompts with automatic answers
 
 gui_menu() {
-    # args: id title [label action ...]
-    # We just auto-execute the last non-empty action (the "Install" option)
     shift 2
     while [ $# -ge 2 ]; do
         label="$1"
         action="$2"
         shift 2
-        # Execute the install action when we see it
-        case "$label" in
-            *"Install the system"*) eval "$action"; return 0 ;;
-        esac
+        if [ -n "$action" ]; then
+            eval "$action"
+            return 0
+        fi
     done
 }
 
@@ -77,6 +75,9 @@ export -f gui_menu gui_yesno gui_input gui_message gui_cmd gui_edit 2>/dev/null 
 
 # --- Load stone install module ---
 echo "INFO: Loading stone install module..."
+echo "INFO: uname -m = $(uname -m)"
+echo "INFO: efi = $([ -e /sys/firmware/efi ] && echo yes || echo no)"
+grep '\(platform\|type\)' /proc/cpuinfo | head -5
 . "$SETUPD/stone_mod_install.sh"
 
 # --- Run automatic partitioning and install ---
@@ -91,7 +92,7 @@ fi
 
 echo "INFO: Installing packages..."
 # stone packages is called inside main() normally, we call it directly
-"$STONE_DIR/../stone.sh" packages
+"$STONE_DIR/stone.sh" packages
 
 echo "INFO: Setting up chroot environment..."
 mount -v --bind /dev /mnt/dev
