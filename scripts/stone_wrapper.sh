@@ -5,6 +5,7 @@
 
 set -xe
 
+
 export platform2="pc"
 
 STONE_DIR="$(dirname "$0")/../deps/stone"
@@ -27,19 +28,46 @@ fi
 
 echo "INFO: Target device: $TARGET_DEV"
 
+# Hack: first we do some cleanup
+echo "INFO: Cleaning up any existing mounts on $TARGET_DEV..."
+swapoff ${TARGET_DEV}1 2>/dev/null || true
+swapoff ${TARGET_DEV}2 2>/dev/null || true
+umount ${TARGET_DEV}2 2>/dev/null || true
+umount ${TARGET_DEV}1 2>/dev/null || true
+systemctl stop udisks2 2>/dev/null || true
+
+echo "INFO: Wiping existing partition table..."
+wipefs --all ${TARGET_DEV}
+dd if=/dev/zero of=${TARGET_DEV} bs=512 count=2048
+partprobe ${TARGET_DEV}
+sleep 1
+
+
+
 # --- Stub out all GUI functions so stone runs non-interactively ---
 # Tchese replace the interactive dialog/text prompts with automatic answers
 
 gui_menu() {
+    local id="$1"
     shift 2
     while [ $# -ge 2 ]; do
         label="$1"
         action="$2"
         shift 2
-        if [ -n "$action" ]; then
-            eval "$action"
-            return 0
-        fi
+        case "$id" in
+            part_mkfs)
+                # Auto-select ext4
+                case "$label" in
+                    *ext4*) eval "$action"; return 0 ;;
+                esac ;;
+            *)
+                case "$label" in
+                    *"Start Package Manager"*) eval "$action"; return 0 ;;
+                    *"Minimal base"*)          eval "$action"; return 0 ;;
+                    *"Install the system"*)    eval "$action"; return 0 ;;
+                    *"Erasing all data"*)      eval "$action"; return 0 ;;
+                esac ;;
+        esac
     done
 }
 
@@ -90,9 +118,39 @@ if ! grep -q " /mnt" /proc/mounts; then
     exit 1
 fi
 
+# Hack: shouldnt stone do this??
+mkdir -p /mnt/dev /mnt/proc /mnt/sys /mnt/tmp
+
 echo "INFO: Installing packages..."
 # stone packages is called inside main() normally, we call it directly
-"$STONE_DIR/stone.sh" packages
+#"$STONE_DIR/stone.sh" packages
+
+mkdir -p /media/cdrom
+mount -o ro /dev/sr0 /media/cdrom 2>/dev/null || true
+
+SDECFG_SHORTID=$(grep '^export SDECFG_SHORTID=' /etc/SDE-CONFIG/config 2>/dev/null | cut -f2- -d= | tr -d "'")
+
+if [ -f "/media/cdrom/live.squash" ]; then
+    echo "INFO: Live image detected, copying filesystem..."
+    mkdir -p /media/live
+    mount -o loop /media/cdrom/live.squash /media/live
+    rsync -aAX --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/tmp \
+        /media/live/ /mnt/
+    umount /media/live
+elif [ -d "/media/cdrom/${SDECFG_SHORTID}/pkgs" ]; then
+    echo "INFO: Package-based install detected..."
+    export PATH="$PATH:$(realpath ../deps/mine-0.23)"
+    chmod +x ../deps/mine-0.23/gasgui ../deps/mine-0.23/mine
+    startgas() {
+        [ -z "$(cd $dir; ls)" ] && mount -o ro $dev $dir
+        gasgui -F -c "$SDECFG_SHORTID" -t "/mnt" -d "/dev/sr0" -s "/media/cdrom"
+    }
+    . "$SETUPD/stone_mod_packages.sh"
+    startgas
+else
+    echo "ERROR: No packages or live.squash found on install media"
+    exit 1
+fi
 
 echo "INFO: Setting up chroot environment..."
 mount -v --bind /dev /mnt/dev
