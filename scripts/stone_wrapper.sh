@@ -101,6 +101,21 @@ gui_edit() {
 
 export -f gui_menu gui_yesno gui_input gui_message gui_cmd gui_edit 2>/dev/null || true
 
+# --- Stub out setup functions with defaults ---
+USERNAME="user"
+PASSWORD="password"
+
+set_passwd() {
+    echo "$1:$PASSWORD" | chpasswd
+}
+
+create_user() {
+    useradd -m -G audio,input,users,video "$USERNAME" 2>/dev/null || true
+    echo "$USERNAME:$PASSWORD" | chpasswd
+}
+
+export -f set_passwd create_user 2>/dev/null || true
+
 # --- Load stone install module ---
 echo "INFO: Loading stone install module..."
 echo "INFO: uname -m = $(uname -m)"
@@ -136,6 +151,33 @@ if [ -f "/media/cdrom/live.squash" ]; then
     mount -o loop /media/cdrom/live.squash /media/live
     rsync -aAX --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/tmp \
         /media/live/ /mnt/
+    echo "INFO: Enabling display manager..."
+    chroot /mnt systemctl enable plasmalogin
+    echo "INFO: Installing bootloader..."
+    mount --bind /dev /mnt/dev
+    mount --bind /proc /mnt/proc
+    mount --bind /sys /mnt/sys
+    mount --bind /run /mnt/run
+    mount --bind /sys/firmware/efi/efivars /mnt/sys/firmware/efi/efivars 2>/dev/null || true
+
+
+    # Strip partition number to get the disk
+    DISK=$(echo "$TARGET_DEV" | sed 's/[0-9]*$//')
+
+	cat > /mnt/etc/default/grub << 'EOF'
+GRUB_DEFAULT=0
+GRUB_TIMEOUT=5
+GRUB_DISTRIBUTOR="T2 Linux"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet"
+GRUB_CMDLINE_LINUX=""
+EOF
+
+    chroot /mnt mkdir -p /boot/grub2 /boot/grub
+    chroot /mnt grub2-install "$DISK"
+    chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
+    ln -s /boot/grub/grub.cfg /mnt/boot/grub2/grub.cfg 2>/dev/null || true
+
+    umount /mnt/dev /mnt/proc /mnt/sys /mnt/run /mnt/sys/firmware/efi/efivar 2>/dev/null || true
     umount /media/live
 elif [ -d "/media/cdrom/${SDECFG_SHORTID}/pkgs" ]; then
     echo "INFO: Package-based install detected..."
@@ -156,7 +198,7 @@ echo "INFO: Setting up chroot environment..."
 mount -v --bind /dev /mnt/dev
 
 cat > /mnt/tmp/stone_postinst.sh << 'EOF'
-#!/bin/sh
+#!/bin/bash
 mount -v /proc
 mount -v /sys
 . /etc/profile
