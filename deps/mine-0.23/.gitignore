@@ -1,0 +1,10 @@
+*.o
+*.a
+mine
+mine.static
+gasgui
+cdb-0.75/auto-str
+cdb-0.75/cdbget
+cdb-0.75/compile
+cdb-0.75/load
+cdb-0.75/makelib
