@@ -5,12 +5,13 @@
 
 set -xe
 
-
 export platform2="pc"
 
 STONE_DIR="$(dirname "$0")/../deps/stone"
 SETUPD="$STONE_DIR"
 export SETUPD
+
+MINE_DIR="$(dirname "$0")/../deps/mine-0.23"
 
 # --- Validate arguments ---
 if [ -z "$1" ]; then
@@ -26,145 +27,210 @@ if [ ! -b "$TARGET_DEV" ]; then
     exit 1
 fi
 
+# User credentials — caller should override via environment if desired
+USERNAME="${USERNAME:-user}"
+PASSWORD="${PASSWORD:-password}"
+
 echo "INFO: Target device: $TARGET_DEV"
 
-# Hack: first we do some cleanup
-echo "INFO: Cleaning up any existing mounts on $TARGET_DEV..."
-swapoff ${TARGET_DEV}1 2>/dev/null || true
-swapoff ${TARGET_DEV}2 2>/dev/null || true
-umount ${TARGET_DEV}2 2>/dev/null || true
-umount ${TARGET_DEV}1 2>/dev/null || true
-systemctl stop udisks2 2>/dev/null || true
+cleanup_mounts() {
+    echo "INFO: Cleaning up any existing mounts on $TARGET_DEV..."
+    swapoff "${TARGET_DEV}1" 2>/dev/null || true
+    swapoff "${TARGET_DEV}2" 2>/dev/null || true
+    umount "${TARGET_DEV}2" 2>/dev/null || true
+    umount "${TARGET_DEV}1" 2>/dev/null || true
+    systemctl stop udisks2 2>/dev/null || true
+}
 
-echo "INFO: Wiping existing partition table..."
-wipefs --all ${TARGET_DEV}
-dd if=/dev/zero of=${TARGET_DEV} bs=512 count=2048
-partprobe ${TARGET_DEV}
-sleep 1
+wipe_device() {
+    echo "INFO: Wiping existing partition table on $TARGET_DEV..."
+    wipefs --all "$TARGET_DEV"
+    dd if=/dev/zero of="$TARGET_DEV" bs=512 count=2048
+    partprobe "$TARGET_DEV"
+    sleep 1
+}
 
-
-
-# --- Stub out all GUI functions so stone runs non-interactively ---
-# Tchese replace the interactive dialog/text prompts with automatic answers
-
-gui_menu() {
-    local id="$1"
-    shift 2
-    while [ $# -ge 2 ]; do
-        label="$1"
-        action="$2"
+# ---------------------------------------------------------------------------
+# Stub out all stone interactive functions, all prompts get defaults.
+# ---------------------------------------------------------------------------
+setup_gui_stubs() {
+    gui_menu() {
+        local id="$1"
         shift 2
-        case "$id" in
-            part_mkfs)
-                # Auto-select ext4
-                case "$label" in
-                    *ext4*) eval "$action"; return 0 ;;
-                esac ;;
-            *)
-                case "$label" in
-                    *"Start Package Manager"*) eval "$action"; return 0 ;;
-                    *"Minimal base"*)          eval "$action"; return 0 ;;
-                    *"Install the system"*)    eval "$action"; return 0 ;;
-                    *"Erasing all data"*)      eval "$action"; return 0 ;;
-                esac ;;
+        while [ $# -ge 2 ]; do
+            local label="$1"
+            local action="$2"
+            shift 2
+            case "$id" in
+                part_mkfs)
+                    case "$label" in
+                        *ext4*) eval "$action"; return 0 ;;
+                    esac ;;
+                *)
+                    case "$label" in
+                        *"Start Package Manager"*) eval "$action"; return 0 ;;
+                        *"Minimal base"*)          eval "$action"; return 0 ;;
+                        *"Install the system"*)    eval "$action"; return 0 ;;
+                        *"Erasing all data"*)      eval "$action"; return 0 ;;
+                    esac ;;
+            esac
+        done
+    }
+
+    gui_yesno() {
+        echo "AUTO-YES: $1"
+        return 0
+    }
+
+    gui_input() {
+        local prompt="$1"
+        local default="$2"
+        local varname="$3"
+        echo "AUTO-INPUT: $prompt -> $default"
+        eval "$varname='$default'"
+    }
+
+    gui_message() {
+        echo "INFO: $1"
+    }
+
+    gui_cmd() {
+        echo "RUNNING: $1"
+        shift
+        "$@"
+    }
+
+    gui_edit() {
+        echo "SKIP: editing $1 (non-interactive)"
+    }
+
+    export -f gui_menu gui_yesno gui_input gui_message gui_cmd gui_edit 2>/dev/null || true
+}
+
+# ---------------------------------------------------------------------------
+# Mount CD-ROM and detect install source
+# ---------------------------------------------------------------------------
+mount_cdrom() {
+    mkdir -p /media/cdrom
+    mount -o ro /dev/sr0 /media/cdrom 2>/dev/null || true
+
+    SDECFG_SHORTID=$(grep '^export SDECFG_SHORTID=' /etc/SDE-CONFIG/config 2>/dev/null \
+        | cut -f2- -d= | tr -d "'")
+}
+
+live_install() {
+    local squash="/media/cdrom/live.squash"
+    local loopmnt
+    loopmnt=$(mktemp -d /tmp/t2-live-XXXXXX)
+
+    echo "INFO: Mounting live squash image from $squash..."
+    mount -o ro,loop "$squash" "$loopmnt"
+
+    echo "INFO: Copying filesystem to /mnt..."
+    rsync -aAX \
+        --exclude=/proc \
+        --exclude=/sys \
+        --exclude=/dev \
+        --exclude=/run \
+        --exclude=/tmp \
+        --exclude=/lost+found \
+        --exclude=/etc/machine-id \
+        --exclude=/var/lib/systemd/random-seed \
+        "$loopmnt/" /mnt/
+
+    umount "$loopmnt"
+    rmdir "$loopmnt"
+}
+
+# ---------------------------------------------------------------------------
+# Use stone's gasgui/mine directly.
+# ---------------------------------------------------------------------------
+package_install() {
+    echo "INFO: Package-based install detected..."
+
+    # Gasgui needs to know file format
+    SDECFG_PKGFILE_TYPE="$(grep '^export SDECFG_PKGFILE_TYPE=' \
+        /etc/SDE-CONFIG/config 2>/dev/null | cut -f2- -d= | tr -d "'")"
+
+    export PATH="$PATH:$(realpath "$MINE_DIR")"
+    chmod +x "$MINE_DIR/gasgui" "$MINE_DIR/mine"
+
+    dev="/dev/sr0"
+    dir="/media/cdrom"
+    root="/mnt"
+    gasguiopt="-F"
+
+    # Source with right variables
+    . "$SETUPD/stone_mod_packages.sh"
+
+    startgas
+}
+
+generate_fstab() {
+    local target="/mnt"
+    echo "INFO: Generating $target/etc/fstab..."
+    echo "# Generated by T2 installer on $(date -u)" > "$target/etc/fstab"
+
+    while read -r dev mnt fstype opts dump pass _; do
+        # Only include mounts under /mnt
+        [[ "$mnt" != "$target"* ]] && continue
+
+        # Translate mount point back to installed root
+        mnt="${mnt#$target}"
+        mnt="${mnt:-/}"
+
+        # Skip pseudo/virtual filesystems
+        case "$fstype" in
+            tmpfs|devtmpfs|sysfs|proc|devpts|securityfs|cgroup*|pstore|bpf|hugetlbfs|mqueue|debugfs|tracefs|fusectl|configfs)
+                continue ;;
         esac
-    done
+
+        local uuid
+        uuid=$(blkid -s UUID -o value "$dev" 2>/dev/null)
+        if [ -n "$uuid" ]; then
+            printf 'UUID=%-40s %s %s %s %s %s\n' \
+                "$uuid" "$mnt" "$fstype" "$opts" "${dump:-0}" "${pass:-2}"
+        else
+            printf '%-44s %s %s %s %s %s\n' \
+                "$dev" "$mnt" "$fstype" "$opts" "${dump:-0}" "${pass:-2}"
+        fi
+    done < /proc/mounts >> "$target/etc/fstab"
+
+    # Ensure root pass is 1, not 2
+    sed -i 's/\(UUID=[^ ]*\s\+\/\s\+[^ ]*\s\+[^ ]*\s\+[0-9]\s\+\)2$/\11/' "$target/etc/fstab"
 }
 
-gui_yesno() {
-    echo "AUTO-YES: $1"
-    return 0
+bind_mount_vfs() {
+    local target="/mnt"
+    mount --bind /dev  "$target/dev"
+    mount --bind /proc "$target/proc"
+    mount --bind /sys  "$target/sys"
+    mount --bind /run  "$target/run"
+    if [ -e /sys/firmware/efi ]; then
+        mount --bind /sys/firmware/efi/efivars "$target/sys/firmware/efi/efivars"
+    fi
 }
 
-gui_input() {
-    # args: prompt default varname
-    local prompt="$1"
-    local default="$2"
-    local varname="$3"
-    echo "AUTO-INPUT: $prompt -> $default"
-    eval "$varname='$default'"
+unbind_vfs() {
+    local target="/mnt"
+    if [ -e /sys/firmware/efi ]; then
+        umount "$target/sys/firmware/efi/efivars" 2>/dev/null || true
+    fi
+    umount "$target/run"  2>/dev/null || true
+    umount "$target/sys"  2>/dev/null || true
+    umount "$target/proc" 2>/dev/null || true
+    umount "$target/dev"  2>/dev/null || true
 }
 
-gui_message() {
-    echo "INFO: $1"
-}
+# ---------------------------------------------------------------------------
+# Install and configure GRUB(2), for both EFI and BIOS targets. 
+# ---------------------------------------------------------------------------
+install_bootloader() {
+    local target="/mnt"
 
-gui_cmd() {
-    echo "RUNNING: $1"
-    shift
-    "$@"
-}
+   echo "INFO: Installing bootloader to $TARGET_DEV..."
 
-gui_edit() {
-    echo "SKIP: editing $1 (non-interactive)"
-}
-
-export -f gui_menu gui_yesno gui_input gui_message gui_cmd gui_edit 2>/dev/null || true
-
-# --- Stub out setup functions with defaults ---
-USERNAME="user"
-PASSWORD="password"
-
-set_passwd() {
-    echo "$1:$PASSWORD" | chpasswd
-}
-
-create_user() {
-    useradd -m -G audio,input,users,video "$USERNAME" 2>/dev/null || true
-    echo "$USERNAME:$PASSWORD" | chpasswd
-}
-
-export -f set_passwd create_user 2>/dev/null || true
-
-# --- Load stone install module ---
-echo "INFO: Loading stone install module..."
-echo "INFO: uname -m = $(uname -m)"
-echo "INFO: efi = $([ -e /sys/firmware/efi ] && echo yes || echo no)"
-grep '\(platform\|type\)' /proc/cpuinfo | head -5
-. "$SETUPD/stone_mod_install.sh"
-
-# --- Run automatic partitioning and install ---
-echo "INFO: Starting automatic partition of $TARGET_DEV..."
-disk_partition "$TARGET_DEV"
-
-echo "INFO: Checking mounts..."
-if ! grep -q " /mnt" /proc/mounts; then
-    echo "ERROR: Nothing mounted at /mnt after partitioning"
-    exit 1
-fi
-
-# Hack: shouldnt stone do this??
-mkdir -p /mnt/dev /mnt/proc /mnt/sys /mnt/tmp
-
-echo "INFO: Installing packages..."
-# stone packages is called inside main() normally, we call it directly
-#"$STONE_DIR/stone.sh" packages
-
-mkdir -p /media/cdrom
-mount -o ro /dev/sr0 /media/cdrom 2>/dev/null || true
-
-SDECFG_SHORTID=$(grep '^export SDECFG_SHORTID=' /etc/SDE-CONFIG/config 2>/dev/null | cut -f2- -d= | tr -d "'")
-
-if [ -f "/media/cdrom/live.squash" ]; then
-    echo "INFO: Live image detected, copying filesystem..."
-    mkdir -p /media/live
-    mount -o loop /media/cdrom/live.squash /media/live
-    rsync -aAX --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/tmp \
-        /media/live/ /mnt/
-    echo "INFO: Enabling display manager..."
-    chroot /mnt systemctl enable plasmalogin
-    echo "INFO: Installing bootloader..."
-    mount --bind /dev /mnt/dev
-    mount --bind /proc /mnt/proc
-    mount --bind /sys /mnt/sys
-    mount --bind /run /mnt/run
-    mount --bind /sys/firmware/efi/efivars /mnt/sys/firmware/efi/efivars 2>/dev/null || true
-
-
-    # Strip partition number to get the disk
-    DISK=$(echo "$TARGET_DEV" | sed 's/[0-9]*$//')
-
-	cat > /mnt/etc/default/grub << 'EOF'
+    cat > "$target/etc/default/grub" << 'EOF'
 GRUB_DEFAULT=0
 GRUB_TIMEOUT=5
 GRUB_DISTRIBUTOR="T2 Linux"
@@ -172,54 +238,112 @@ GRUB_CMDLINE_LINUX_DEFAULT="quiet"
 GRUB_CMDLINE_LINUX=""
 EOF
 
-    chroot /mnt mkdir -p /boot/grub2 /boot/grub
-    chroot /mnt grub2-install "$DISK"
-    chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
-    ln -s /boot/grub/grub.cfg /mnt/boot/grub2/grub.cfg 2>/dev/null || true
+    chroot "$target" mkdir -p /boot/grub2 /boot/grub
 
-    umount /mnt/dev /mnt/proc /mnt/sys /mnt/run /mnt/sys/firmware/efi/efivar 2>/dev/null || true
-    umount /media/live
-elif [ -d "/media/cdrom/${SDECFG_SHORTID}/pkgs" ]; then
-    echo "INFO: Package-based install detected..."
-    export PATH="$PATH:$(realpath ../deps/mine-0.23)"
-    chmod +x ../deps/mine-0.23/gasgui ../deps/mine-0.23/mine
-    startgas() {
-        [ -z "$(cd $dir; ls)" ] && mount -o ro $dev $dir
-        gasgui -F -c "$SDECFG_SHORTID" -t "/mnt" -d "/dev/sr0" -s "/media/cdrom"
-    }
-    . "$SETUPD/stone_mod_packages.sh"
-    startgas
-else
-    echo "ERROR: No packages or live.squash found on install media"
-    exit 1
-fi
+    if [ -e /sys/firmware/efi ]; then
+        chroot "$target" grub2-install \
+            --target=x86_64-efi \
+            --efi-directory=/boot/efi \
+            --bootloader-id=T2Linux \
+            --recheck
+    else
+        chroot "$target" grub2-install --recheck "$TARGET_DEV"
+    fi
 
-echo "INFO: Setting up chroot environment..."
-mount -v --bind /dev /mnt/dev
+    chroot "$target" grub-mkconfig -o /boot/grub/grub.cfg
 
-cat > /mnt/tmp/stone_postinst.sh << 'EOF'
-#!/bin/bash
-mount -v /proc
-mount -v /sys
-. /etc/profile
-stone setup
-umount -v /dev
-umount -v /proc
-umount -v /sys
-EOF
+    # If grub2 is somehow not available, but grub is then just cp
+    if [ ! -f "$target/boot/grub2/grub.cfg" ]; then
+        chroot "$target" mkdir -p /boot/grub2
+        chroot "$target" cp /boot/grub/grub.cfg /boot/grub2/grub.cfg
+    fi
+}
 
-chmod +x /mnt/tmp/stone_postinst.sh
+# ---------------------------------------------------------------------------
+# Manual post install; skip stone
+# ---------------------------------------------------------------------------
+post_install() {
+    local target="/mnt"
 
-# Generate /mnt/etc/mtab from current mounts
-rm -f /mnt/etc/mtab
-sed -n '/ \/mnt[/ ]/s,/mnt/\?,/,p' /proc/mounts > /mnt/etc/mtab
+    echo "INFO: Starting post-install configuration..."
 
-# Copy keymap if set
-cp -f /etc/default.keymap /mnt/etc/ 2>/dev/null || true
+    # Ensure required directories exist in target: Potentially Hacky
+    mkdir -p "$target/dev" "$target/proc" "$target/sys" "$target/run" "$target/tmp"
 
-echo "INFO: Running post-install setup in chroot..."
-chroot /mnt /tmp/stone_postinst.sh
-rm -f /mnt/tmp/stone_postinst.sh
+    bind_mount_vfs
 
-echo "INFO: Installation complete. You may now reboot."
-exit 0
+    generate_fstab
+
+    install_bootloader
+
+    # Cant copy machine-id from host; must be unique 
+    rm -f "$target/etc/machine-id"
+    chroot "$target" systemd-machine-id-setup
+
+    chroot "$target" systemctl enable plasmalogin   2>/dev/null || true
+    chroot "$target" systemctl enable NetworkManager 2>/dev/null || true
+
+    chroot "$target" useradd -m -G audio,input,users,video "$USERNAME" 2>/dev/null || true
+    echo "$USERNAME:$PASSWORD" | chroot "$target" chpasswd
+    echo "root:$PASSWORD"      | chroot "$target" chpasswd
+
+    cp -f /etc/default.keymap "$target/etc/" 2>/dev/null || true
+
+    # Rebuild shared libs
+    chroot "$target" ldconfig 2>/dev/null || true
+
+    # One-time package hooks 
+    for x in "$target"/etc/postinstall.d/*; do
+        [ -f "$x" ] || continue
+        echo "INFO: Running postinstall hook ${x##*/}"
+        chroot "$target" "/etc/postinstall.d/${x##*/}"
+    done
+
+    unbind_vfs
+
+    echo "INFO: Post-install configuration complete."
+}
+
+main() {
+    cleanup_mounts
+    wipe_device
+    setup_gui_stubs
+
+    # For debugging
+    echo "INFO: uname -m = $(uname -m)"
+    echo "INFO: efi = $([ -e /sys/firmware/efi ] && echo yes || echo no)"
+    grep '\(platform\|type\)' /proc/cpuinfo | head -5
+
+    # Source stone's install module; gives us disk_partition()
+    . "$SETUPD/stone_mod_install.sh"
+
+    echo "INFO: Partitioning $TARGET_DEV..."
+    disk_partition "$TARGET_DEV"
+
+    echo "INFO: Checking mounts..."
+    if ! grep -q " /mnt" /proc/mounts; then
+        echo "ERROR: Nothing mounted at /mnt after partitioning"
+        exit 1
+    fi
+
+    mount_cdrom
+
+    if [ -f "/media/cdrom/live.squash" ]; then
+        echo "INFO: Live image detected — performing live install..."
+        live_install
+    elif [ -d "/media/cdrom/${SDECFG_SHORTID}/pkgs" ]; then
+        echo "INFO: Package-based install detected..."
+        package_install
+    else
+        echo "ERROR: No valid install source found on install media"
+        echo "ERROR:   Looked for: /media/cdrom/live.squash"
+        echo "ERROR:   Looked for: /media/cdrom/${SDECFG_SHORTID}/pkgs"
+        exit 1
+    fi
+
+    post_install
+
+    echo "INFO: Installation complete. You may now reboot."
+}
+
+main

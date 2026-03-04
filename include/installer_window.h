@@ -6,6 +6,7 @@
 #include <QProcess>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QLabel>
 
 class InstallerWindow : public QMainWindow {
     Q_OBJECT
@@ -23,6 +24,7 @@ class InstallerWindow : public QMainWindow {
     QPushButton *installButton;
     QProgressBar *progressBar;
     QProcess *buildProcess;
+    QLabel *statusLabel;
 
     void setupUI();
     void loadDrives();
