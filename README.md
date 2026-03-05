@@ -51,7 +51,3 @@ There are 2 ways we can install to the target drive/device:
 ## Contributing
 
 PRs and contributions in any way/shape/form are always welcome and highly appreciated :). 
-
-## Closing
-
-t2-installer is made
