@@ -36,4 +36,4 @@ $ cp -r package/base/stone deps/
 From packages/base/stone in the T2 SDE Linux upstream github repo.
 
 Then I modified platform to fallback to 'pc'
-[`stone/custom-t2-installer-stone-platform2-fallback.patch`](stone/t2-installer-stone-platform2-fallback.patch)
+[`stone/custom-t2-installer-stone-platform2-fallback.patch`](stone/custom-t2-installer-stone-platform2-fallback.patch)
