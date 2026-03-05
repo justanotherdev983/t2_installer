@@ -1,0 +1,32 @@
+
+About "mine"
+============
+
+Mine is the ROCK Linux package manager. Please read the file GEM-MINE for
+details.
+
+
+Installing
+==========
+
+Simply type "make" and "make install".
+
+
+Redistributed Source
+====================
+
+This source distribution of "mine" contains sources from the following other
+packages. "mine" does not depend on any external library except the libc
+and the following libraries which are statically linked with "mine" and are
+part of this source distribution:
+
+ * cdb-0.75/ contains the cdb 0.75 distribution as available for download
+   from the cdb homepage <http://cr.yp.to/cdb.html> with the cdb-0.75.patch
+   patch (as found in this directory) applied.
+
+ * libtar-1.2.5/ contains the libtar 1.2.5 distribution as available for
+   download from the libtar homepage <http://www-dev.cso.uiuc.edu/libtar/>.
+
+ * bzip-1.0.2/ contains the bzip2 1,0,2 distribution as available for download
+   from the bzip2 homepage <http://sources.redhat.com/bzip2/>.
+
