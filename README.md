@@ -17,6 +17,9 @@ External deps bundled under `deps/`:
 
 ```bash
 $ cmake -B build
+$ cd build
+$ make
+$ chmod +x scripts/stone_wrapper.sh deps/stone/*.sh
 ```
 
 ## Usage
@@ -24,9 +27,6 @@ $ cmake -B build
 Boot the T2 live ISO, then:
 
 ```bash
-$ cd build
-$ make
-$ chmod +x scripts/stone_wrapper.sh deps/stone/*.sh
 # ./t2_installer
 ```
 
