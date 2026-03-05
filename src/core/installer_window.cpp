@@ -22,13 +22,13 @@ class DriveItemWidget : public QWidget {
                         QWidget *parent = nullptr)
             : QWidget(parent), driveName(name), driveSize(size),
               isHovered(false), isSelected(false) {
-                setMinimumSize(140, 110);
+                setMinimumSize(450, 250);
                 setCursor(Qt::PointingHandCursor);
 
                 drivePixmap = QPixmap("../assets/drive.png");
         }
 
-        QSize sizeHint() const override { return QSize(140, 110); }
+        QSize sizeHint() const override { return QSize(450, 250); }
 
         void setSelected(bool selected) {
                 isSelected = selected;
@@ -280,8 +280,27 @@ void InstallerWindow::loadDrives() {
                         QString size_str =
                             QString("%1 GB").arg(size_device_gb, 0, 'f', 1);
 
+                	std::filesystem::path model_path = device.path() / "device/model";
+			std::ifstream model_file(model_path);
+			std::string model_name;
+			std::getline(model_file, model_name);
+
+			// Some drive manufacturers like to put the size of the drive in the name
+			// We will trim it as to not duplicate size
+			if (std::regex_search(model_name, std::regex("TB|GB|MB"))) {
+				model_name = std::regex_replace( 
+					model_name,
+					std::regex("\\s*\\d+(\\.\\d+)?\\s*(TB|GB|MB)"),	
+					""
+					);
+			}
+
+			QString device_display_str = QString::fromStdString(model_name) + 
+				" (" + device_name + ")";
+
+
                         auto *item = new QListWidgetItem(driveList);
-                        auto *widget = new DriveItemWidget(device_name, size_str);
+                        auto *widget = new DriveItemWidget(device_display_str, size_str);
 
                         item->setSizeHint(widget->sizeHint());
                         driveList->addItem(item);

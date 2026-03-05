@@ -1,0 +1,455 @@
+diff --color -ruN mine-base-t2sde/cdb-0.75/alloc.c mine-patched-for-installer/cdb-0.75/alloc.c
+--- mine-base-t2sde/cdb-0.75/alloc.c	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/cdb-0.75/alloc.c	2026-03-03 19:41:57.354204592 +0100
+@@ -1,7 +1,7 @@
+ #include "alloc.h"
+ #include "error.h"
+-extern char *malloc();
+-extern void free();
++extern char *malloc(unsigned int);
++extern void free(void *);
+ 
+ #define ALIGNMENT 16 /* XXX: assuming that this alignment is enough */
+ #define SPACE 4096 /* must be multiple of ALIGNMENT */
+diff --color -ruN mine-base-t2sde/cdb-0.75/alloc.h mine-patched-for-installer/cdb-0.75/alloc.h
+--- mine-base-t2sde/cdb-0.75/alloc.h	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/cdb-0.75/alloc.h	2026-03-03 19:41:57.354204592 +0100
+@@ -1,8 +1,8 @@
+ #ifndef ALLOC_H
+ #define ALLOC_H
+ 
+-extern /*@null@*//*@out@*/char *alloc();
+-extern void alloc_free();
+-extern int alloc_re();
++extern /*@null@*//*@out@*/char *alloc(unsigned int);
++extern void alloc_free(char *);
++extern int alloc_re(void *, unsigned int, unsigned int);
+ 
+ #endif
+diff --color -ruN mine-base-t2sde/cdb-0.75/buffer.c mine-patched-for-installer/cdb-0.75/buffer.c
+--- mine-base-t2sde/cdb-0.75/buffer.c	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/cdb-0.75/buffer.c	2026-03-03 19:41:57.354204592 +0100
+@@ -1,6 +1,6 @@
+ #include "buffer.h"
+ 
+-void buffer_init(buffer *s,int (*op)(),int fd,char *buf,unsigned int len)
++void buffer_init(buffer *s,int (*op)(int, char *, unsigned int),int fd,char *buf,unsigned int len)
+ {
+   s->x = buf;
+   s->fd = fd;
+diff --color -ruN mine-base-t2sde/cdb-0.75/buffer_get.c mine-patched-for-installer/cdb-0.75/buffer_get.c
+--- mine-base-t2sde/cdb-0.75/buffer_get.c	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/cdb-0.75/buffer_get.c	2026-03-03 19:41:57.354204592 +0100
+@@ -2,7 +2,7 @@
+ #include "byte.h"
+ #include "error.h"
+ 
+-static int oneread(int (*op)(),int fd,char *buf,unsigned int len)
++static int oneread(int (*op)(int, char *, unsigned int),int fd,char *buf,unsigned int len)
+ {
+   int r;
+ 
+diff --color -ruN mine-base-t2sde/cdb-0.75/buffer.h mine-patched-for-installer/cdb-0.75/buffer.h
+--- mine-base-t2sde/cdb-0.75/buffer.h	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/cdb-0.75/buffer.h	2026-03-03 19:41:57.354204592 +0100
+@@ -6,14 +6,14 @@
+   unsigned int p;
+   unsigned int n;
+   int fd;
+-  int (*op)();
++  int (*op)(int, char *, unsigned int);
+ } buffer;
+ 
+ #define BUFFER_INIT(op,fd,buf,len) { (buf), 0, (len), (fd), (op) }
+ #define BUFFER_INSIZE 8192
+ #define BUFFER_OUTSIZE 8192
+ 
+-extern void buffer_init(buffer *,int (*)(),int,char *,unsigned int);
++extern void buffer_init(buffer *,int (*op)(int, char *, unsigned int),int,char *,unsigned int);
+ 
+ extern int buffer_flush(buffer *);
+ extern int buffer_put(buffer *,char *,unsigned int);
+diff --color -ruN mine-base-t2sde/cdb-0.75/buffer_put.c mine-patched-for-installer/cdb-0.75/buffer_put.c
+--- mine-base-t2sde/cdb-0.75/buffer_put.c	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/cdb-0.75/buffer_put.c	2026-03-03 19:41:57.354204592 +0100
+@@ -3,7 +3,7 @@
+ #include "byte.h"
+ #include "error.h"
+ 
+-static int allwrite(int (*op)(),int fd,char *buf,unsigned int len)
++static int allwrite(int (*op)(int, char *, unsigned int),int fd,char *buf,unsigned int len)
+ {
+   int w;
+ 
+diff --color -ruN mine-base-t2sde/cdb-0.75/byte.h mine-patched-for-installer/cdb-0.75/byte.h
+--- mine-base-t2sde/cdb-0.75/byte.h	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/cdb-0.75/byte.h	2026-03-03 19:41:57.354204592 +0100
+@@ -1,12 +1,13 @@
+ #ifndef BYTE_H
+ #define BYTE_H
+ 
+-extern unsigned int byte_chr();
+-extern unsigned int byte_rchr();
+-extern void byte_copy();
+-extern void byte_copyr();
+-extern int byte_diff();
+-extern void byte_zero();
++
++extern unsigned int byte_chr(const char *, unsigned int, int);
++extern unsigned int byte_rchr(const char *, unsigned int, int);
++extern void byte_zero(char *, unsigned int);
++extern void byte_copyr(char *, unsigned int, char *);
++extern void byte_copy(char *, unsigned int, char *);
++extern int byte_diff(char *, unsigned int, char *);
+ 
+ #define byte_equal(s,n,t) (!byte_diff((s),(n),(t)))
+ 
+diff --color -ruN mine-base-t2sde/cdb-0.75/cdbget.c mine-patched-for-installer/cdb-0.75/cdbget.c
+--- mine-base-t2sde/cdb-0.75/cdbget.c	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/cdb-0.75/cdbget.c	2026-03-03 19:41:57.354204592 +0100
+@@ -23,7 +23,7 @@
+ static struct cdb c;
+ char buf[1024];
+ 
+-main(int argc,char **argv)
++int main(int argc,char **argv)
+ {
+   char *key;
+   int r;
+diff --color -ruN mine-base-t2sde/cdb-0.75/cdb_make.c mine-patched-for-installer/cdb-0.75/cdb_make.c
+--- mine-base-t2sde/cdb-0.75/cdb_make.c	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/cdb-0.75/cdb_make.c	2026-03-03 19:41:57.354204592 +0100
+@@ -15,7 +15,7 @@
+   c->numentries = 0;
+   c->fd = fd;
+   c->pos = sizeof c->final;
+-  buffer_init(&c->b,write,fd,c->bspace,sizeof c->bspace);
++  buffer_init(&c->b,write,fd,c->bspace,sizeof(c->bspace));
+   return seek_set(fd,c->pos);
+ }
+ 
+diff --color -ruN mine-base-t2sde/cdb-0.75/cdbmake.c mine-patched-for-installer/cdb-0.75/cdbmake.c
+--- mine-base-t2sde/cdb-0.75/cdbmake.c	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/cdb-0.75/cdbmake.c	2026-03-03 19:41:57.356204579 +0100
+@@ -26,7 +26,7 @@
+   strerr_die2x(111,FATAL,"unable to read input: bad format");
+ }
+ 
+-inline void get(char *ch)
++static inline void get(char *ch)
+ {
+   switch(buffer_GETC(buffer_0,ch)) {
+     case 0: die_readformat();
+diff --color -ruN mine-base-t2sde/cdb-0.75/compile mine-patched-for-installer/cdb-0.75/compile
+--- mine-base-t2sde/cdb-0.75/compile	1970-01-01 01:00:00.000000000 +0100
++++ mine-patched-for-installer/cdb-0.75/compile	2026-03-03 19:41:57.353204599 +0100
+@@ -0,0 +1,3 @@
++#!/bin/sh
++# WARNING: This file was auto-generated. Do not edit!
++exec gcc -w -Wno-incompatible-pointer-types -Wno-int-conversion -Wno-implicit-int -Wno-implicit-function-declaration -c ${1+"$@"}
+diff --color -ruN mine-base-t2sde/cdb-0.75/conf-cc mine-patched-for-installer/cdb-0.75/conf-cc
+--- mine-base-t2sde/cdb-0.75/conf-cc	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/cdb-0.75/conf-cc	2026-03-03 19:41:57.350204619 +0100
+@@ -1,3 +1 @@
+-${CC:-gcc} -O2
+-
+-This will be used to compile .c files.
++gcc -w -Wno-incompatible-pointer-types -Wno-int-conversion -Wno-implicit-int -Wno-implicit-function-declaration
+diff --color -ruN mine-base-t2sde/cdb-0.75/exit.h mine-patched-for-installer/cdb-0.75/exit.h
+--- mine-base-t2sde/cdb-0.75/exit.h	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/cdb-0.75/exit.h	2026-03-03 19:41:57.354204592 +0100
+@@ -1,6 +1,6 @@
+ #ifndef EXIT_H
+ #define EXIT_H
+ 
+-extern void _exit();
++extern void _exit(int);
+ 
+ #endif
+diff --color -ruN mine-base-t2sde/cdb-0.75/load mine-patched-for-installer/cdb-0.75/load
+--- mine-base-t2sde/cdb-0.75/load	1970-01-01 01:00:00.000000000 +0100
++++ mine-patched-for-installer/cdb-0.75/load	2026-03-03 19:41:57.353204599 +0100
+@@ -0,0 +1,4 @@
++#!/bin/sh
++# WARNING: This file was auto-generated. Do not edit!
++main="$1"; shift
++exec ${CC:-gcc} -s -o "$main" "$main".o ${1+"$@"}
+diff --color -ruN mine-base-t2sde/cdb-0.75/makelib mine-patched-for-installer/cdb-0.75/makelib
+--- mine-base-t2sde/cdb-0.75/makelib	1970-01-01 01:00:00.000000000 +0100
++++ mine-patched-for-installer/cdb-0.75/makelib	2026-03-03 19:41:57.354204592 +0100
+@@ -0,0 +1,6 @@
++#!/bin/sh
++# WARNING: This file was auto-generated. Do not edit!
++main="$1"; shift
++rm -f "$main"
++ar cr "$main" ${1+"$@"}
++ranlib "$main"
+diff --color -ruN mine-base-t2sde/cdb-0.75/readwrite.h mine-patched-for-installer/cdb-0.75/readwrite.h
+--- mine-base-t2sde/cdb-0.75/readwrite.h	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/cdb-0.75/readwrite.h	2026-03-03 19:41:57.354204592 +0100
+@@ -1,7 +1,7 @@
+ #ifndef READWRITE_H
+ #define READWRITE_H
+ 
+-extern int read();
+-extern int write();
++extern int read(int, void *, unsigned int);
++extern int write(int, const void *, unsigned int);
+ 
+ #endif
+diff --color -ruN mine-base-t2sde/cdb-0.75/systype mine-patched-for-installer/cdb-0.75/systype
+--- mine-base-t2sde/cdb-0.75/systype	1970-01-01 01:00:00.000000000 +0100
++++ mine-patched-for-installer/cdb-0.75/systype	2026-03-03 19:41:57.354204592 +0100
+@@ -0,0 +1 @@
++linux-6.17.1-300.fc43.x86_64-:-:-:x86_64-:-
+diff --color -ruN mine-base-t2sde/cdb-0.75/uint32.h mine-patched-for-installer/cdb-0.75/uint32.h
+--- mine-base-t2sde/cdb-0.75/uint32.h	1970-01-01 01:00:00.000000000 +0100
++++ mine-patched-for-installer/cdb-0.75/uint32.h	2026-03-03 19:41:57.354204592 +0100
+@@ -0,0 +1,11 @@
++#ifndef UINT32_H
++#define UINT32_H
++
++typedef unsigned int uint32;
++
++extern void uint32_pack(char *,uint32);
++extern void uint32_pack_big(char *,uint32);
++extern void uint32_unpack(char *,uint32 *);
++extern void uint32_unpack_big(char *,uint32 *);
++
++#endif
+diff --color -ruN mine-base-t2sde/.gitignore mine-patched-for-installer/.gitignore
+--- mine-base-t2sde/.gitignore	1970-01-01 01:00:00.000000000 +0100
++++ mine-patched-for-installer/.gitignore	2026-03-03 19:41:57.367204505 +0100
+@@ -0,0 +1,10 @@
++*.o
++*.a
++mine
++mine.static
++gasgui
++cdb-0.75/auto-str
++cdb-0.75/cdbget
++cdb-0.75/compile
++cdb-0.75/load
++cdb-0.75/makelib
+diff --color -ruN mine-base-t2sde/libtar-1.2.11/compat/compat.h mine-patched-for-installer/libtar-1.2.11/compat/compat.h
+--- mine-base-t2sde/libtar-1.2.11/compat/compat.h	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/libtar-1.2.11/compat/compat.h	2026-03-03 19:41:57.361649521 +0100
+@@ -9,7 +9,7 @@
+ # include <stdarg.h>
+ # include <stddef.h>
+ #else
+-# include <varargs.h>
++# include <stdarg.h>
+ #endif
+ 
+ #ifdef HAVE_LIBGEN_H
+diff --color -ruN mine-base-t2sde/libtar-1.2.11/compat/fnmatch.c mine-patched-for-installer/libtar-1.2.11/compat/fnmatch.c
+--- mine-base-t2sde/libtar-1.2.11/compat/fnmatch.c	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/libtar-1.2.11/compat/fnmatch.c	2026-03-03 19:41:57.361649521 +0100
+@@ -1,4 +1,5 @@
+ /*	$OpenBSD: fnmatch.c,v 1.6 1998/03/19 00:29:59 millert Exp $	*/
++#include <string.h>
+ 
+ /*
+  * Copyright (c) 1989, 1993, 1994
+@@ -73,7 +74,7 @@
+ #ifdef NO_IBM_COMPILER_HORKAGE
+ static int rangematch (const char *, char, int, char **);
+ #else
+-static int rangematch ();
++static int rangematch(const char *, char, int, char **);
+ #endif
+ 
+ int
+
+diff --color -ruN mine-base-t2sde/libtar-1.2.11/lib/append.c mine-patched-for-installer/libtar-1.2.11/lib/append.c
+--- mine-base-t2sde/libtar-1.2.11/lib/append.c	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/libtar-1.2.11/lib/append.c	2026-03-03 19:41:57.363855397 +0100
+@@ -1,3 +1,8 @@
++#include <stdlib.h>
++#include <string.h>
++#include <stddef.h>
++#include <stdlib.h>
++#include <string.h>
+ /*
+ **  Copyright 1998-2003 University of Illinois Board of Trustees
+ **  Copyright 1998-2003 Mark D. Roth
+@@ -254,3 +259,5 @@
+ }
+ 
+ 
++#include <stdlib.h>
++#include <string.h>
+diff --color -ruN mine-base-t2sde/libtar-1.2.11/lib/block.c mine-patched-for-installer/libtar-1.2.11/lib/block.c
+--- mine-base-t2sde/libtar-1.2.11/lib/block.c	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/libtar-1.2.11/lib/block.c	2026-03-03 19:41:57.363855397 +0100
+@@ -1,3 +1,6 @@
++#include <stdlib.h>
++#include <string.h>
++#include <stddef.h>
+ /*
+ **  Copyright 1998-2003 University of Illinois Board of Trustees
+ **  Copyright 1998-2003 Mark D. Roth
+diff --color -ruN mine-base-t2sde/libtar-1.2.11/lib/decode.c mine-patched-for-installer/libtar-1.2.11/lib/decode.c
+--- mine-base-t2sde/libtar-1.2.11/lib/decode.c	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/libtar-1.2.11/lib/decode.c	2026-03-03 19:41:57.363855397 +0100
+@@ -1,3 +1,6 @@
++#include <stdlib.h>
++#include <string.h>
++#include <stddef.h>
+ /*
+ **  Copyright 1998-2003 University of Illinois Board of Trustees
+ **  Copyright 1998-2003 Mark D. Roth
+@@ -118,3 +121,5 @@
+ }
+ 
+ 
++#include <stdlib.h>
++#include <string.h>
+diff --color -ruN mine-base-t2sde/libtar-1.2.11/lib/encode.c mine-patched-for-installer/libtar-1.2.11/lib/encode.c
+--- mine-base-t2sde/libtar-1.2.11/lib/encode.c	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/libtar-1.2.11/lib/encode.c	2026-03-03 19:41:57.363855397 +0100
+@@ -1,3 +1,6 @@
++#include <stdlib.h>
++#include <string.h>
++#include <stddef.h>
+ /*
+ **  Copyright 1998-2003 University of Illinois Board of Trustees
+ **  Copyright 1998-2003 Mark D. Roth
+diff --color -ruN mine-base-t2sde/libtar-1.2.11/lib/extract.c mine-patched-for-installer/libtar-1.2.11/lib/extract.c
+--- mine-base-t2sde/libtar-1.2.11/lib/extract.c	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/libtar-1.2.11/lib/extract.c	2026-03-03 19:41:57.363855397 +0100
+@@ -1,3 +1,6 @@
++#include <stdlib.h>
++#include <string.h>
++#include <stddef.h>
+ /*
+ **  Copyright 1998-2003 University of Illinois Board of Trustees
+ **  Copyright 1998-2003 Mark D. Roth
+@@ -527,3 +530,5 @@
+ }
+ 
+ 
++#include <stdlib.h>
++#include <string.h>
+diff --color -ruN mine-base-t2sde/libtar-1.2.11/lib/handle.c mine-patched-for-installer/libtar-1.2.11/lib/handle.c
+--- mine-base-t2sde/libtar-1.2.11/lib/handle.c	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/libtar-1.2.11/lib/handle.c	2026-03-03 19:41:57.363855397 +0100
+@@ -1,3 +1,6 @@
++#include <stdlib.h>
++#include <string.h>
++#include <stddef.h>
+ /*
+ **  Copyright 1998-2003 University of Illinois Board of Trustees
+ **  Copyright 1998-2003 Mark D. Roth
+@@ -127,3 +130,5 @@
+ }
+ 
+ 
++#include <stdlib.h>
++#include <string.h>
+
+diff --color -ruN mine-base-t2sde/libtar-1.2.11/lib/output.c mine-patched-for-installer/libtar-1.2.11/lib/output.c
+--- mine-base-t2sde/libtar-1.2.11/lib/output.c	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/libtar-1.2.11/lib/output.c	2026-03-03 19:41:57.363855397 +0100
+@@ -1,3 +1,6 @@
++#include <stdlib.h>
++#include <string.h>
++#include <stddef.h>
+ /*
+ **  Copyright 1998-2003 University of Illinois Board of Trustees
+ **  Copyright 1998-2003 Mark D. Roth
+@@ -132,3 +135,5 @@
+ }
+ 
+ 
++#include <stdlib.h>
++#include <string.h>
+
+diff --color -ruN mine-base-t2sde/libtar-1.2.11/lib/util.c mine-patched-for-installer/libtar-1.2.11/lib/util.c
+--- mine-base-t2sde/libtar-1.2.11/lib/util.c	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/libtar-1.2.11/lib/util.c	2026-03-03 19:41:57.363855397 +0100
+@@ -1,3 +1,6 @@
++#include <stdlib.h>
++#include <string.h>
++#include <stddef.h>
+ /*
+ **  Copyright 1998-2003 University of Illinois Board of Trustees
+ **  Copyright 1998-2003 Mark D. Roth
+@@ -148,3 +151,5 @@
+ }
+ 
+ 
++#include <stdlib.h>
++#include <string.h>
+diff --color -ruN mine-base-t2sde/libtar-1.2.11/lib/wrapper.c mine-patched-for-installer/libtar-1.2.11/lib/wrapper.c
+--- mine-base-t2sde/libtar-1.2.11/lib/wrapper.c	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/libtar-1.2.11/lib/wrapper.c	2026-03-03 19:41:57.363855397 +0100
+@@ -1,3 +1,6 @@
++#include <stdlib.h>
++#include <string.h>
++#include <stddef.h>
+ /*
+ **  Copyright 1998-2003 University of Illinois Board of Trustees
+ **  Copyright 1998-2003 Mark D. Roth
+@@ -150,3 +153,5 @@
+ }
+ 
+ 
++#include <stdlib.h>
++#include <string.h>
+diff --color -ruN mine-base-t2sde/libtar-1.2.11/libtar/libtar.c mine-patched-for-installer/libtar-1.2.11/libtar/libtar.c
+--- mine-base-t2sde/libtar-1.2.11/libtar/libtar.c	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/libtar-1.2.11/libtar/libtar.c	2026-03-03 19:41:57.365504236 +0100
+@@ -1,3 +1,5 @@
++#include <stdlib.h>
++#include <string.h>
+ /*
+ **  Copyright 1998-2003 University of Illinois Board of Trustees
+ **  Copyright 1998-2003 Mark D. Roth
+
+diff --color -ruN mine-base-t2sde/libtar-1.2.11/listhash/hash.c.in mine-patched-for-installer/libtar-1.2.11/listhash/hash.c.in
+--- mine-base-t2sde/libtar-1.2.11/listhash/hash.c.in	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/libtar-1.2.11/listhash/hash.c.in	2026-03-03 19:41:57.360897646 +0100
+@@ -1,4 +1,7 @@
+ /* @configure_input@ */
++#include <stdlib.h>
++#include <string.h>
++#include <stddef.h>
+ 
+ /*
+ **  Copyright 1998-2002 University of Illinois Board of Trustees
+
+diff --color -ruN mine-base-t2sde/libtar-1.2.11/listhash/list.c.in mine-patched-for-installer/libtar-1.2.11/listhash/list.c.in
+--- mine-base-t2sde/libtar-1.2.11/listhash/list.c.in	2003-08-28 13:49:26.000000000 +0200
++++ mine-patched-for-installer/libtar-1.2.11/listhash/list.c.in	2026-03-03 19:41:57.360897646 +0100
+@@ -1,4 +1,7 @@
+ /* @configure_input@ */
++#include <stdlib.h>
++#include <string.h>
++#include <stddef.h>
+ 
+ /*
+ **  Copyright 1998-2002 University of Illinois Board of Trustees
+
+diff --color -ruN mine-base-t2sde/Makefile mine-patched-for-installer/Makefile
+--- mine-base-t2sde/Makefile	2005-09-30 13:59:05.000000000 +0200
++++ mine-patched-for-installer/Makefile	2026-03-03 19:41:57.366204512 +0100
+@@ -50,6 +50,7 @@
+ CFLAGS  = -I$(CDB_DIR) -I$(BZIP2_DIR) -I$(LIBTAR_DIR)/lib -I. -Wall -Os
+ CFLAGS += -I$(LIBTAR_DIR)/listhash -DMINE_VERSION=\"$(MINE_VER)\" -ggdb
+ CFLAGS += -DGEMCACHE=\"/var/cache/gem\" -DMINECURLOPT=\"/etc/mine.curlopt\"
++CFLAGS += -std=gnu89 -w -I/usr/include/dialog -DMAX_LEN=2048
+ ifeq ($(USE_AVL), 1)
+   CFLAGS   += -DUSE_AVL=1
+   MINE_OBJ += avl.o
+@@ -103,7 +104,8 @@
+ $(MINE_OBJ): $(CDB_OBJ) $(BZIP2_OBJ) $(LIBTAR_OBJ)
+ 
+ $(CDB_OBJ):
+-	$(BUILDCC) -o $(CDB_DIR)/auto-str $(CDB_DIR)/auto-str.c
++	$(BUILDCC) -std=gnu89 -w -o $(CDB_DIR)/auto-str $(CDB_DIR)/auto-str.c
++	echo "gcc -w -Wno-incompatible-pointer-types -Wno-int-conversion -Wno-implicit-int -Wno-implicit-function-declaration" > $(CDB_DIR)/conf-cc
+ 	$(MAKE) 'AR=$(AR)' 'RANLIB=$(RANLIB)' -C $(CDB_DIR)
+ 
+ $(BZIP2_OBJ):
