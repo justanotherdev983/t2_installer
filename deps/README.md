@@ -24,7 +24,7 @@ I obtained the mine source by doing:
 After which I extracted the tarball and put them in the repo.
 
 Then I ported mine to compile with a modern compiler with the patch:
-[`deps/mine-0.23/custom-t2-installer-mine-modern-c-port.patch`](deps/mine-0.23/custom-t2-installer-mine-modern-c-port.patch`)
+[`deps/mine-0.23/custom-t2-installer-mine-modern-c-port.patch`](deps/mine-0.23/custom-t2-installer-mine-modern-c-port.patch)
 
 
 ### stone
@@ -36,4 +36,4 @@ $ cp -r package/base/stone deps/
 From packages/base/stone in the T2 SDE Linux upstream github repo.
 
 Then I modified platform to fallback to 'pc'
-[`deps/stone-0.23/custom-t2-installer-stone-platform2-fallback.patch`](deps/stone/t2-installer-stone-platform2-fallback.patch`)
+[`deps/stone-0.23/custom-t2-installer-stone-platform2-fallback.patch`](deps/stone/t2-installer-stone-platform2-fallback.patch)
