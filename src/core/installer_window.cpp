@@ -68,7 +68,7 @@ class DriveItemWidget : public QWidget {
                 // Drive icon or fallback
                 if (!drivePixmap.isNull()) {
                         QPixmap scaled = drivePixmap.scaled(
-                            36, 36, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                            128, 128, Qt::KeepAspectRatio, Qt::SmoothTransformation);
                         int x = (width() - scaled.width()) / 2;
                         p.drawPixmap(x, 14, scaled);
                 } else {
@@ -91,7 +91,7 @@ class DriveItemWidget : public QWidget {
                 nameFont.setPointSize(11);
                 nameFont.setBold(true);
                 p.setFont(nameFont);
-                p.drawText(QRect(8, 58, width() - 16, 22), Qt::AlignCenter, driveName);
+                p.drawText(QRect(8, 100, width() - 16, 22), Qt::AlignCenter, driveName);
 
                 // Size 
                 QFont sizeFont = p.font();
@@ -99,7 +99,7 @@ class DriveItemWidget : public QWidget {
                 sizeFont.setBold(false);
                 p.setFont(sizeFont);
                 p.setPen(QColor(234, 179, 8));
-                p.drawText(QRect(8, 78, width() - 16, 18), Qt::AlignCenter, driveSize);
+                p.drawText(QRect(8, 125, width() - 16, 18), Qt::AlignCenter, driveSize);
         }
 
       private:
